@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Person Lookup (AJAX)</title>
+  <!-- COMP 4621 Assignment 2 - Part 2: AJAX person search -->
+  <style>
+    :root {
+      --bg: #f4f6f9; --card: #ffffff; --text: #1f2933; --muted: #616e7c;
+      --accent: #2563eb; --ok-bg: #ecfdf5; --ok: #047857;
+      --err-bg: #fef2f2; --err: #b91c1c; --border: #d9dee5;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: "Segoe UI", Arial, sans-serif;
+      background: var(--bg); color: var(--text);
+      display: flex; justify-content: center; padding: 48px 16px;
+    }
+    .card {
+      background: var(--card); width: 100%; max-width: 520px;
+      border-radius: 12px; padding: 28px; box-shadow: 0 4px 18px rgba(0,0,0,.08);
+    }
+    h1 { margin: 0 0 4px; font-size: 1.5rem; }
+    .sub { margin: 0 0 20px; color: var(--muted); }
+    form { display: flex; gap: 8px; }
+    label.visually-hidden { position: absolute; left: -9999px; }
+    input[type=text] {
+      flex: 1; padding: 10px 12px; font-size: 1rem;
+      border: 1px solid var(--border); border-radius: 8px;
+    }
+    input[type=text]:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    button {
+      padding: 10px 18px; font-size: 1rem; border: 0; border-radius: 8px;
+      background: var(--accent); color: #fff; cursor: pointer;
+    }
+    button:disabled { opacity: .6; cursor: wait; }
+    .hint { font-size: .85rem; color: var(--muted); margin: 8px 0 0; }
+    #result { margin-top: 22px; }
+    .msg { padding: 12px 14px; border-radius: 8px; }
+    .msg.error { background: var(--err-bg); color: var(--err); }
+    .msg.loading { color: var(--muted); }
+    .person { background: var(--ok-bg); border-radius: 8px; padding: 16px; }
+    .person h2 { margin: 0 0 10px; color: var(--ok); font-size: 1.2rem; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid #d1fae5; }
+    th { width: 35%; color: var(--muted); font-weight: 600; }
+    .suggest { margin-top: 10px; }
+    .suggest button {
+      background: transparent; color: var(--accent); padding: 2px 6px;
+      text-decoration: underline; font-size: .95rem;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Person Lookup</h1>
+    <p class="sub">Enter a person's name to look up their details on the server.</p>
+
+    <form id="searchForm" novalidate>
+      <label for="nameInput" class="visually-hidden">Person's name</label>
+      <input type="text" id="nameInput" name="name" placeholder="e.g. Alice Johnson"
+             maxlength="50" autocomplete="off" autofocus>
+      <button type="submit" id="searchBtn">Search</button>
+    </form>
+    <p class="hint">Search by full name or first name (not case-sensitive).</p>
+
+    <div id="result" aria-live="polite"></div>
+  </main>
+
+  <script>
+    var form   = document.getElementById('searchForm');
+    var input  = document.getElementById('nameInput');
+    var button = document.getElementById('searchBtn');
+    var result = document.getElementById('result');
+
+    // labels for the table
+    var LABELS = { name: 'Name', age: 'Age', email: 'Email', phone: 'Phone',
+                   city: 'City', occupation: 'Occupation' };
+
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();          // don't reload the page
+      searchPerson(input.value);
+    });
+
+    // send the name to search.php
+    function searchPerson(rawName) {
+      var name = rawName.trim();
+
+      // check for empty input first
+      if (name === '') {
+        showError('Please enter a name to search for.');
+        input.focus();
+        return;
+      }
+
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', 'search.php?name=' + encodeURIComponent(name), true);
+      xhr.timeout = 8000;
+
+      xhr.onreadystatechange = function () {
+        if (xhr.readyState !== 4) return;      // wait until done
+        setLoading(false);
+        if (xhr.status === 0) return;           // onerror/ontimeout handle this
+
+        var data;
+        try {
+          data = JSON.parse(xhr.responseText);
+        } catch (e) {
+          showError('The server sent an unexpected response. Is PHP running?');
+          return;
+        }
+
+        if (xhr.status === 200 && data.found) {
+          showPerson(data.person);
+        } else {
+          showError(data.message || 'Request failed (HTTP ' + xhr.status + ').', data.suggestions);
+        }
+      };
+
+      xhr.onerror   = function () { setLoading(false); showError('Could not reach the server. Check your connection and try again.'); };
+      xhr.ontimeout = function () { setLoading(false); showError('The server took too long to respond. Please try again.'); };
+
+      setLoading(true);
+      xhr.send();
+    }
+
+    // functions to update the page (using textContent so html isn't run)
+    function setLoading(isLoading) {
+      button.disabled = isLoading;
+      button.textContent = isLoading ? 'Searching…' : 'Search';
+      if (isLoading) {
+        result.innerHTML = '';
+        var p = document.createElement('p');
+        p.className = 'msg loading';
+        p.textContent = 'Searching…';
+        result.appendChild(p);
+      }
+    }
+
+    function showPerson(person) {
+      result.innerHTML = '';
+      var box = document.createElement('div');
+      box.className = 'person';
+
+      var h2 = document.createElement('h2');
+      h2.textContent = 'Person found';
+      box.appendChild(h2);
+
+      var table = document.createElement('table');
+      Object.keys(LABELS).forEach(function (key) {
+        if (person[key] === undefined) return;
+        var row = table.insertRow();
+        var th = document.createElement('th');
+        th.textContent = LABELS[key];
+        row.appendChild(th);
+        row.insertCell().textContent = person[key];
+      });
+      box.appendChild(table);
+      result.appendChild(box);
+    }
+
+    function showError(message, suggestions) {
+      result.innerHTML = '';
+      var box = document.createElement('div');
+      box.className = 'msg error';
+      box.textContent = message;
+
+      if (suggestions && suggestions.length) {
+        var s = document.createElement('div');
+        s.className = 'suggest';
+        s.appendChild(document.createTextNode('Did you mean: '));
+        suggestions.forEach(function (n) {
+          var b = document.createElement('button');
+          b.type = 'button';
+          b.textContent = n;
+          b.addEventListener('click', function () { input.value = n; searchPerson(n); });
+          s.appendChild(b);
+        });
+        box.appendChild(s);
+      }
+      result.appendChild(box);
+    }
+  </script>
+</body>
+</html>

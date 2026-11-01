@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<!-- COMP 4621 Assignment 2 - Part 3: phone list sorted with AngularJS -->
+<html lang="en" ng-app="phoneBookApp">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phone Directory (AngularJS)</title>
+  
+  <!-- angular file is in the folder so it works offline -->
+  <script src="angular.min.js"></script>
+  <script src="app.js"></script>
+  <style>
+    [ng-cloak] { display: none !important; }
+    :root {
+      --bg: #f4f6f9; --card: #fff; --text: #1f2933; --muted: #616e7c;
+      --accent: #c2410c; --accent-soft: #fff7ed; --border: #d9dee5;
+      --err: #b91c1c; --err-bg: #fef2f2; --ok: #047857; --ok-bg: #ecfdf5;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: "Segoe UI", Arial, sans-serif; background: var(--bg);
+      color: var(--text); display: flex; justify-content: center; padding: 40px 16px;
+    }
+    .card { background: var(--card); width: 100%; max-width: 640px; border-radius: 12px;
+            padding: 28px; box-shadow: 0 4px 18px rgba(0,0,0,.08); }
+    h1 { margin: 0 0 4px; font-size: 1.5rem; }
+    h2 { font-size: 1.05rem; margin: 26px 0 10px; }
+    .sub { margin: 0 0 18px; color: var(--muted); }
+    .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    input[type=text], input[type=tel] {
+      padding: 9px 11px; font-size: 1rem; border: 1px solid var(--border); border-radius: 8px;
+    }
+    .toolbar input { flex: 1; min-width: 180px; }
+    button { padding: 9px 14px; font-size: .95rem; border: 0; border-radius: 8px;
+             background: var(--accent); color: #fff; cursor: pointer; }
+    button.secondary { background: var(--accent-soft); color: var(--accent); border: 1px solid #fed7aa; }
+    button.link { background: none; color: var(--err); padding: 2px 6px; font-size: .85rem; }
+    table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+    th, td { padding: 10px 8px; text-align: left; border-bottom: 1px solid var(--border); }
+    th { background: var(--accent-soft); font-size: .85rem; text-transform: uppercase;
+         letter-spacing: .03em; color: var(--muted); }
+    td.num { color: var(--muted); width: 40px; }
+    td.phone { font-family: Consolas, monospace; }
+    td.act { text-align: right; width: 80px; }
+    tr.new td { background: var(--ok-bg); }
+    .count { font-size: .9rem; color: var(--muted); margin-top: 8px; }
+    .empty { padding: 14px; color: var(--muted); text-align: center; }
+    form.add { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: start; }
+    .field input { width: 100%; }
+    .field small { color: var(--err); display: block; margin-top: 4px; font-size: .8rem; }
+    input.ng-invalid.ng-touched, form.ng-submitted input.ng-invalid { border-color: var(--err); background: var(--err-bg); }
+    .msg { margin-top: 10px; padding: 10px 12px; border-radius: 8px; font-size: .95rem; }
+    .msg.error { background: var(--err-bg); color: var(--err); }
+    .msg.ok { background: var(--ok-bg); color: var(--ok); }
+    @media (max-width: 560px) { form.add { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body ng-controller="PhoneBookController" ng-cloak>
+  <main class="card">
+    <h1>Phone Directory</h1>
+    <p class="sub">Names and phone numbers, sorted alphabetically with AngularJS.</p>
+
+    <!-- search and sort -->
+    <div class="toolbar">
+      <input type="text" ng-model="search" placeholder="Search by name or number…" aria-label="Search contacts">
+      <button type="button" class="secondary" ng-click="toggleSort()">
+        Sort: {{ sortReverse ? 'Z → A' : 'A → Z' }}
+      </button>
+    </div>
+
+    <!-- list sorted by name with orderBy -->
+    <table>
+      <thead>
+        <tr><th>#</th><th>Name</th><th>Phone</th><th></th></tr>
+      </thead>
+      <tbody>
+        <tr ng-repeat="c in filtered = (contacts | filter:search | orderBy:'name':sortReverse)"
+            ng-class="{ new: c.name === lastAdded }">
+          <td class="num">{{ $index + 1 }}</td>
+          <td>{{ c.name }}</td>
+          <td class="phone">{{ c.phone }}</td>
+          <td class="act"><button type="button" class="link" ng-click="removeContact(c)">Remove</button></td>
+        </tr>
+        <tr ng-if="filtered.length === 0">
+          <td colspan="4" class="empty">No contacts match "{{ search }}".</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="count">Showing {{ filtered.length }} of {{ contacts.length }} contacts.</p>
+
+    <!-- add contact form -->
+    <h2>Add a contact</h2>
+    <form name="addForm" class="add" ng-submit="addContact(addForm)" novalidate>
+      <div class="field">
+        <input type="text" name="name" ng-model="newContact.name" placeholder="Full name"
+               required ng-minlength="2" ng-maxlength="40" ng-pattern="/^[A-Za-z][A-Za-z .'-]*$/"
+               aria-label="Full name">
+        <small ng-show="(addForm.name.$touched || addForm.$submitted) && addForm.name.$error.required">Name is required.</small>
+        <small ng-show="addForm.name.$error.minlength">Name must be at least 2 characters.</small>
+        <small ng-show="addForm.name.$error.maxlength">Name must be 40 characters or fewer.</small>
+        <small ng-show="addForm.name.$error.pattern">Use letters, spaces, hyphens or apostrophes only.</small>
+      </div>
+      <div class="field">
+        <input type="tel" name="phone" ng-model="newContact.phone" placeholder="250-555-0100"
+               required ng-pattern="phonePattern" aria-label="Phone number">
+        <small ng-show="(addForm.phone.$touched || addForm.$submitted) && addForm.phone.$error.required">Phone number is required.</small>
+        <small ng-show="addForm.phone.$error.pattern">Enter a 10-digit number, e.g. 250-555-0100.</small>
+      </div>
+      <button type="submit">Add</button>
+    </form>
+    <div class="msg error" ng-show="formError">{{ formError }}</div>
+    <div class="msg ok" ng-show="lastAdded">"{{ lastAdded }}" was added and placed in alphabetical order.</div>
+  </main>
+</body>
+</html>
